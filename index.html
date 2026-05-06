@@ -271,6 +271,8 @@
 <div id="canvasClickHint" style="display:none;">💡 Click on a player dot to select them and enable Follow Cam perspective.</div>
 <canvas id="pitchCanvas" width="1400" height="907"></canvas>
 <canvas id="pitchCanvasVor" width="1400" height="907"></canvas>
+<div style="margin-top:6px;max-width:1200px;font-size:12px;font-weight:600;color:#333;">Pitch Control (Spearman-style)</div>
+<canvas id="pitchCanvasPC" width="1400" height="907"></canvas>
 
 <!-- ═══════════ 3D VIEW ═══════════ -->
 <div class="threeWrap">
@@ -375,6 +377,7 @@
       </div>
       <button id="videoPlainBtn">🎥 Vídeo</button>
       <button id="videoVorBtn">🎥 Vídeo Voronoi</button>
+      <button id="videoPcBtn">🎥 Vídeo PC</button>
       <button id="plusBtn2" title="+0,10s">+0,10s</button>
       <button id="minusBtn2" title="-0,10s">-0,10s</button>
       <button id="playBtn2">▶ Play</button>
@@ -437,8 +440,29 @@
   const ctx       = canvas.getContext("2d");
   const canvasVor = $("pitchCanvasVor");
   const ctxVor    = canvasVor.getContext("2d");
+  const canvasPC  = $("pitchCanvasPC");
+  const ctxPC     = canvasPC.getContext("2d");
 
   const pitchW = 105, pitchH = 68;
+  const DT = 0.1;
+
+  // ── Pitch Control parameters (Spearman-style) ───────────────────────────
+  const PC_PARAMS = {
+    gridX: 84, gridY: 56,
+    reactionTime: 0.70,
+    maxPlayerSpeed: 5.2,
+    maxInstantSpeed: 8.5,
+    integrationDt: 0.04,
+    integrationHorizon: 4.0,
+    sigma: 0.45,
+    lambdaAtt: 4.3,
+    lambdaDef: 4.3,
+    timeEpsilon: 1e-4,
+    alphaMin: 0.05,
+    alphaMax: 0.48,
+    neutralFadeBand: 0.05,
+    blurPasses: 2
+  };
 
   let pitchImg        = null;
   let matchDataCache  = null;
@@ -1204,12 +1228,13 @@
   }
 
   function toCanvasXY(x,y,which="main") {
-    const c=(which==="vor")?canvasVor:canvas;
+    const c=(which==="pc")?canvasPC:(which==="vor")?canvasVor:canvas;
     return [x*(c.width/pitchW), (pitchH-y)*(c.height/pitchH)];
   }
 
   function drawPitchImageBase(which="main") {
-    const c=(which==="vor")?canvasVor:canvas, cctx=(which==="vor")?ctxVor:ctx;
+    const c=(which==="pc")?canvasPC:(which==="vor")?canvasVor:canvas;
+    const cctx=(which==="pc")?ctxPC:(which==="vor")?ctxVor:ctx;
     cctx.clearRect(0,0,c.width,c.height);
     if (!pitchImg) {
       cctx.fillStyle="#0b7a2a"; cctx.fillRect(0,0,c.width,c.height);
@@ -1327,6 +1352,148 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PITCH CONTROL (Spearman-style)
+  // ─────────────────────────────────────────────────────────────────────────
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function pcSigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+  function getPlayerVelocityMap(frameObj, prevObjOrNull) {
+    const prevPos = prevObjOrNull ? getPlayerPosMap(prevObjOrNull) : new Map();
+    const out = new Map();
+    for (const pl of (frameObj?.player_data || [])) {
+      if (pl.x == null || pl.y == null) continue;
+      const p1 = prevPos.get(pl.player_id);
+      let vx = 0, vy = 0, speed = 0;
+      if (p1) {
+        vx = (pl.x - p1.x) / DT; vy = (pl.y - p1.y) / DT;
+        speed = Math.hypot(vx, vy);
+        if (speed > PC_PARAMS.maxInstantSpeed && speed > 0) {
+          const s = PC_PARAMS.maxInstantSpeed / speed; vx *= s; vy *= s; speed = PC_PARAMS.maxInstantSpeed;
+        }
+      }
+      out.set(pl.player_id, { x: pl.x, y: pl.y, vx, vy, speed });
+    }
+    return out;
+  }
+
+  function buildPitchControlPlayers(matchData, frameObj, prevObjOrNull) {
+    const homeId = matchData.home_team?.id;
+    const pMap = buildPlayerMaps(matchData);
+    const vMap = getPlayerVelocityMap(frameObj, prevObjOrNull);
+    const homePlayers = [], awayPlayers = [];
+    for (const pl of (frameObj?.player_data || [])) {
+      if (pl.x == null || pl.y == null) continue;
+      const info = pMap.get(pl.player_id); if (!info) continue;
+      const v = vMap.get(pl.player_id);   if (!v)    continue;
+      const rx = clamp(v.x + v.vx * PC_PARAMS.reactionTime, -52.5, 52.5);
+      const ry = clamp(v.y + v.vy * PC_PARAMS.reactionTime, -34, 34);
+      const obj = { player_id: pl.player_id, team_id: info.team, x: v.x, y: v.y, vx: v.vx, vy: v.vy, speed: v.speed, reactionX: rx, reactionY: ry };
+      if (info.team === homeId) homePlayers.push(obj); else awayPlayers.push(obj);
+    }
+    return { homePlayers, awayPlayers };
+  }
+
+  function pcTimeToIntercept(player, tx, ty) {
+    return PC_PARAMS.reactionTime + Math.hypot(tx - player.reactionX, ty - player.reactionY) / PC_PARAMS.maxPlayerSpeed;
+  }
+
+  function pcInterceptionProb(player, tti, t) {
+    const z = Math.PI / Math.sqrt(3) / PC_PARAMS.sigma * (t - tti);
+    return pcSigmoid(z);
+  }
+
+  function integratePCAtTarget(homePlayers, awayPlayers, tx, ty) {
+    if (!homePlayers.length && !awayPlayers.length) return 0.5;
+    if (!homePlayers.length) return 0.0;
+    if (!awayPlayers.length) return 1.0;
+    const ttiH = homePlayers.map(p => pcTimeToIntercept(p, tx, ty));
+    const ttiA = awayPlayers.map(p => pcTimeToIntercept(p, tx, ty));
+    const minH = Math.min(...ttiH), minA = Math.min(...ttiA);
+    let pHome = 0, pAway = 0;
+    for (let t = Math.max(0, Math.min(minH, minA) - 0.2); t <= PC_PARAMS.integrationHorizon; t += PC_PARAMS.integrationDt) {
+      const residual = Math.max(0, 1 - pHome - pAway);
+      if (residual <= PC_PARAMS.timeEpsilon) break;
+      let sH = 0, sA = 0;
+      for (let i = 0; i < ttiH.length; i++) sH += pcInterceptionProb(homePlayers[i], ttiH[i], t);
+      for (let i = 0; i < ttiA.length; i++) sA += pcInterceptionProb(awayPlayers[i], ttiA[i], t);
+      pHome += residual * sH * PC_PARAMS.lambdaAtt * PC_PARAMS.integrationDt;
+      pAway += residual * sA * PC_PARAMS.lambdaDef * PC_PARAMS.integrationDt;
+      const s = pHome + pAway; if (s > 1) { pHome /= s; pAway /= s; }
+      if (1 - pHome - pAway <= 0.001) break;
+    }
+    const total = pHome + pAway;
+    if (total <= PC_PARAMS.timeEpsilon) return minH < minA ? 0.65 : minA < minH ? 0.35 : 0.5;
+    return pHome / total;
+  }
+
+  function blurPCGrid(grid, w, h, passes) {
+    let src = new Float32Array(grid);
+    for (let pass = 0; pass < passes; pass++) {
+      const tmp = new Float32Array(src.length), out = new Float32Array(src.length);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y*w+x; tmp[i] = (src[y*w+Math.max(0,x-1)] + 2*src[i] + src[y*w+Math.min(w-1,x+1)]) * 0.25;
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y*w+x; out[i] = (tmp[Math.max(0,y-1)*w+x] + 2*tmp[i] + tmp[Math.min(h-1,y+1)*w+x]) * 0.25;
+      }
+      src = out;
+    }
+    return src;
+  }
+
+  function drawPitchControl(matchData, frameObj, colors, prevObjOrNull, playerDrawData, ballDrawData) {
+    drawPitchImageBase("pc");
+    const { homePlayers, awayPlayers } = buildPitchControlPlayers(matchData, frameObj, prevObjOrNull);
+    const { gridX: gx, gridY: gy } = PC_PARAMS;
+    const pGrid = new Float32Array(gx * gy);
+    for (let iy = 0; iy < gy; iy++) for (let ix = 0; ix < gx; ix++) {
+      pGrid[iy*gx+ix] = integratePCAtTarget(homePlayers, awayPlayers,
+        (ix + 0.5) * (pitchW / gx) - 52.5, (iy + 0.5) * (pitchH / gy) - 34);
+    }
+    const smooth = blurPCGrid(pGrid, gx, gy, PC_PARAMS.blurPasses);
+
+    // Build heat image at grid resolution, then scale to canvas
+    const heatOff = (typeof OffscreenCanvas !== "undefined") ? new OffscreenCanvas(gx, gy) : (() => { const c = document.createElement("canvas"); c.width=gx; c.height=gy; return c; })();
+    const heatCtx2 = heatOff.getContext("2d", { willReadFrequently: true });
+    const img = heatCtx2.createImageData(gx, gy);
+    const homeRGB = hexToRgbArray(colors.home), awayRGB = hexToRgbArray(colors.away);
+    for (let iy = 0; iy < gy; iy++) for (let ix = 0; ix < gx; ix++) {
+      const pH = smooth[iy*gx+ix];
+      const dom = Math.abs(pH - 0.5) * 2;
+      const fade = clamp((dom - PC_PARAMS.neutralFadeBand) / (1 - PC_PARAMS.neutralFadeBand), 0, 1);
+      const alpha = PC_PARAMS.alphaMin + fade * (PC_PARAMS.alphaMax - PC_PARAMS.alphaMin);
+      const r = Math.round(homeRGB[0]*pH + awayRGB[0]*(1-pH));
+      const g2 = Math.round(homeRGB[1]*pH + awayRGB[1]*(1-pH));
+      const b = Math.round(homeRGB[2]*pH + awayRGB[2]*(1-pH));
+      const drawY = gy - 1 - iy, idx = (drawY*gx+ix)*4;
+      img.data[idx]=r; img.data[idx+1]=g2; img.data[idx+2]=b; img.data[idx+3]=Math.round(alpha*255);
+    }
+    heatCtx2.putImageData(img, 0, 0);
+    ctxPC.save(); ctxPC.imageSmoothingEnabled=true;
+    if ("imageSmoothingQuality" in ctxPC) ctxPC.imageSmoothingQuality="high";
+    ctxPC.drawImage(heatOff, 0, 0, canvasPC.width, canvasPC.height);
+    ctxPC.restore();
+
+    // Draw players and ball on top of heatmap
+    const rPt = 5;
+    ctxPC.font = "16px system-ui,-apple-system,Segoe UI,Roboto,Arial"; ctxPC.textBaseline = "middle";
+    for (const p of playerDrawData) {
+      ctxPC.beginPath(); ctxPC.arc(p.cx, p.cy, rPt, 0, Math.PI*2); ctxPC.fillStyle=p.color; ctxPC.fill();
+      if (p.label) {
+        ctxPC.lineWidth=4; ctxPC.strokeStyle="rgba(255,255,255,0.92)"; ctxPC.strokeText(p.label, p.cx+12, p.cy-10);
+        ctxPC.fillStyle="rgba(0,0,0,0.92)"; ctxPC.fillText(p.label, p.cx+12, p.cy-10);
+      }
+    }
+    if (ballDrawData) {
+      ctxPC.beginPath(); ctxPC.arc(ballDrawData.cx, ballDrawData.cy, rPt, 0, Math.PI*2); ctxPC.fillStyle="#000"; ctxPC.fill();
+      if (ballDrawData.label) {
+        ctxPC.lineWidth=4; ctxPC.strokeStyle="rgba(255,255,255,0.92)"; ctxPC.strokeText(ballDrawData.label, ballDrawData.cx+12, ballDrawData.cy-10);
+        ctxPC.fillStyle="rgba(0,0,0,0.92)"; ctxPC.fillText(ballDrawData.label, ballDrawData.cx+12, ballDrawData.cy-10);
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PLOT FRAME (main render)
   // ─────────────────────────────────────────────────────────────────────────
   function plotFrame(matchData, frameObj, colors, prevObjOrNull, prev2ObjOrNull) {
@@ -1340,6 +1507,7 @@
     ctx.font="16px system-ui,-apple-system,Segoe UI,Roboto,Arial"; ctx.textBaseline="middle";
 
     const tableRows=[], vorPointsPx=[], vorPointColors=[], vorPointLabels=[];
+    const playerDrawData = [];   // shared with Pitch Control canvas
     vorPointsPx._pids=[];  // track player IDs for selection ring in voronoi
 
     const currPos=getPlayerPosMap(frameObj);
@@ -1385,10 +1553,13 @@
       const [vx,vy]=toCanvasXY(x,y,"vor");
       vorPointsPx.push([vx,vy]); vorPointsPx._pids.push(pl.player_id);
       vorPointColors.push(color); vorPointLabels.push(labelToShow);
+
+      const [pcx,pcy]=toCanvasXY(x,y,"pc");
+      playerDrawData.push({cx:pcx, cy:pcy, color, label:labelToShow});
     });
 
     const b=frameObj.ball_data||{};
-    let ballVorPx=null;
+    let ballVorPx=null, ballDrawData=null;
     if (showBall&&b.x!=null&&b.y!=null) {
       const x=b.x+52.5, y=b.y+34;
       const [cx,cy]=toCanvasXY(x,y,"main");
@@ -1397,6 +1568,8 @@
       ctx.lineWidth=4; ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.strokeText("ball",lx,ly);
       ctx.fillStyle="rgba(0,0,0,0.9)"; ctx.fillText("ball",lx,ly);
       ballVorPx=toCanvasXY(x,y,"vor");
+      const [bpx,bpy]=toCanvasXY(x,y,"pc");
+      ballDrawData={cx:bpx, cy:bpy, label:"ball"};
       tableRows.push({type:"Balón",team:"-",name:"ball",x:numToComma(x,2),y:numToComma(y,2)});
     } else {
       tableRows.push({type:"Balón",team:"-",name:"ball",x:"",y:""});
@@ -1407,6 +1580,7 @@
     $("csvBtn").disabled=false; $("xlsxPosBtn").disabled=false; $("xlsxPhysBtn").disabled=false;
 
     drawVoronoi(vorPointsPx, vorPointColors, vorPointLabels, ballVorPx);
+    drawPitchControl(matchData, frameObj, colors, prevObjOrNull, playerDrawData, ballDrawData);
     update3D(matchData, frameObj, colors);
 
     // Update selected player stats in info bar
@@ -1463,6 +1637,7 @@
     }
     drawHeader("Vista"); addCanvasPage(canvas);
     doc.addPage(); drawHeader("Voronoi"); addCanvasPage(canvasVor);
+    doc.addPage(); drawHeader("Pitch Control"); addCanvasPage(canvasPC);
     doc.save(`tracking_${timestampStr.replace(/[:]/g,"-")}.pdf`);
   }
 
@@ -1704,12 +1879,12 @@
     const durationS=getVideoDurationSeconds(), fps=10, totalFrames=Math.max(1,Math.round(durationS*fps));
     $("videoFallback").style.display="none";
     if(currentVideoBlobUrl){try{URL.revokeObjectURL(currentVideoBlobUrl);}catch(e){} currentVideoBlobUrl=null;}
-    const recordCanvas=(mode==="voronoi")?canvasVor:canvas;
+    const recordCanvas=(mode==="voronoi")?canvasVor:(mode==="pitchcontrol")?canvasPC:canvas;
     if(!recordCanvas.captureStream||!window.MediaRecorder){log("❌ Tu navegador no soporta captura de vídeo. Prueba Chrome/Edge.");return;}
     const stream=recordCanvas.captureStream(fps), mimeType=guessMimeType(), options=mimeType?{mimeType}:undefined;
     let recorder; try{recorder=new MediaRecorder(stream,options);}catch(e){recorder=new MediaRecorder(stream);}
     const chunks=[]; recorder.ondataavailable=(ev)=>{if(ev.data&&ev.data.size)chunks.push(ev.data);};
-    isRecording=true; $("videoVorBtn").disabled=true; $("videoPlainBtn").disabled=true;
+    isRecording=true; $("videoVorBtn").disabled=true; $("videoPlainBtn").disabled=true; $("videoPcBtn").disabled=true;
     log(`🎥 Generando vídeo (${durationS}s) desde ${tsStr}…`); smoothState.clear();
     await startPlayStream(trackingFile);
     const fp=await playStreamReadUntilAtLeastFrame(targetFrame);
@@ -1728,13 +1903,13 @@
     await stopPlayStreamInternal();
     const blob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});
     const blobUrl=URL.createObjectURL(blob); currentVideoBlobUrl=blobUrl;
-    const base=(mode==="voronoi")?"voronoi":"video";
+    const base=(mode==="voronoi")?"voronoi":(mode==="pitchcontrol")?"pitch_control":"video";
     const fname=`${base}_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}_${durationS}s.webm`;
     const a=document.createElement("a"); a.href=blobUrl; a.download=fname; a.rel="noopener"; a.style.display="none"; document.body.appendChild(a);
     let ok=false; try{a.click();ok=true;}catch(e){ok=false;} a.remove();
     if(!ok){$("videoLink").href=blobUrl;$("videoLink").textContent=`Abrir vídeo (${fname})`;$("videoFallback").style.display="block";}
     else{log(`✅ Vídeo: ${fname}`);setTimeout(()=>{if(currentVideoBlobUrl){URL.revokeObjectURL(currentVideoBlobUrl);currentVideoBlobUrl=null;}},5000);}
-    isRecording=false; $("videoVorBtn").disabled=false; $("videoPlainBtn").disabled=false;
+    isRecording=false; $("videoVorBtn").disabled=false; $("videoPlainBtn").disabled=false; $("videoPcBtn").disabled=false;
   }
 
   function setRec3DBadge(){const b=$("rec3dBadge");if(b)b.textContent=isRecording3D?"REC 3D: grabando…":"REC 3D: parado";}
@@ -1798,10 +1973,10 @@
     const f=$("pitchImgFile").files[0]; if(!f) return;
     try {
       pitchImg=await loadImageFromFile(f);
-      drawPitchImageBase("main"); drawPitchImageBase("vor");
+      drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc");
       log("✅ Imagen de campo cargada.");
       if (matchDataCache) await previewRender(true);
-    } catch(e) { pitchImg=null; drawPitchImageBase("main"); drawPitchImageBase("vor"); log("❌ No se pudo cargar la imagen."); }
+    } catch(e) { pitchImg=null; drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc"); log("❌ No se pudo cargar la imagen."); }
   });
 
   $("homeColor").addEventListener("input",  async()=>{ setColorInputs({home:$("homeColor").value,away:$("awayColor").value},"top");   if(matchDataCache&&pitchImg)await previewRender(true); });
@@ -1831,6 +2006,7 @@
   $("csvBtn").addEventListener("click",exportCsvForIframes);
   $("videoVorBtn").addEventListener("click",()=>exportVideo({mode:"voronoi"}));
   $("videoPlainBtn").addEventListener("click",()=>exportVideo({mode:"plain"}));
+  $("videoPcBtn").addEventListener("click",()=>exportVideo({mode:"pitchcontrol"}));
   $("rec3dBtn").addEventListener("click",export3DVideo);
   $("xlsxPosBtn").addEventListener("click",exportXlsxPos);
   $("xlsxPhysBtn").addEventListener("click",exportXlsxPhys);
@@ -1872,7 +2048,7 @@
   // ─────────────────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────────────────
-  drawPitchImageBase("main"); drawPitchImageBase("vor");
+  drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc");
   renderTable(null); renderTableSimple(null);
   syncBottomFromTop();
   setColorInputs({home:$("homeColor").value, away:$("awayColor").value},"top");
