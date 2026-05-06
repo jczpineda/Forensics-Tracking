@@ -160,6 +160,49 @@
       font-size: 11px;
       color: #888;
     }
+
+    /* Bench overlay inside 3D container */
+    #benchOverlay {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      pointer-events: none;
+      z-index: 11;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding-bottom: 22px;
+    }
+    .benchBanner {
+      background: rgba(18, 8, 0, 0.85);
+      color: #ff9900;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 24px;
+      border-radius: 10px;
+      border: 1.5px solid rgba(255,153,0,0.65);
+      backdrop-filter: blur(6px);
+      text-align: center;
+      letter-spacing: 0.02em;
+      max-width: 520px;
+      line-height: 1.5;
+    }
+    .benchBanner .benchSub {
+      display: block;
+      font-size: 11px;
+      font-weight: 400;
+      color: rgba(255,200,120,0.85);
+      margin-top: 3px;
+      letter-spacing: 0;
+    }
+    /* Player card bench state */
+    .playerCard.onbench {
+      opacity: 0.52;
+      border-style: dashed !important;
+    }
+    .playerCard.onbench .pcName::after {
+      content: " \1FAB1";
+    }
   </style>
 </head>
 
@@ -248,6 +291,13 @@
     <!-- Follow-cam overlay -->
     <div id="povOverlay">
       <div class="povBadgeInner">👁 Following: <span id="povOverlayName"></span></div>
+    </div>
+    <!-- Bench overlay -->
+    <div id="benchOverlay">
+      <div class="benchBanner">
+        🪑 <span id="benchOverlayName"></span> is not currently on the pitch
+        <span class="benchSub">Camera moved to bench view — player may substitute in later</span>
+      </div>
     </div>
   </div>
 
@@ -448,6 +498,11 @@
   // Target position for the follow camera (set each frame, smoothed in animate)
   const povTarget  = { camX: 0, camY: 20, camZ: 20, tarX: 0, tarY: 1, tarZ: 0 };
   const povCurrent = { camX: null, camY: null, camZ: null, tarX: null, tarY: null, tarZ: null };
+
+  // Bench-side camera: halfway line, outside the pitch long side, looking at centre
+  const BENCH_CAM = { camX: 0, camY: 10, camZ: -(pitchH / 2 + 18), tarX: 0, tarY: 1, tarZ: 0 };
+
+  let selectedPlayerOnPitch = true; // updated each rendered frame
 
   function lerpNum(a, b, t) {
     if (a === null || a === undefined || !isFinite(a)) return b;
@@ -692,7 +747,20 @@
   function updateFollowCamera(frameObj) {
     if (!selectedSinglePlayer || !frameObj) return;
     const pl = (frameObj.player_data || []).find(p => p.player_id === selectedSinglePlayer);
-    if (!pl || pl.x == null) return;
+
+    if (!pl || pl.x == null) {
+      // Player is on the bench — move camera to bench-side viewpoint
+      selectedPlayerOnPitch = false;
+      povTarget.camX = BENCH_CAM.camX;
+      povTarget.camY = BENCH_CAM.camY;
+      povTarget.camZ = BENCH_CAM.camZ;
+      povTarget.tarX = BENCH_CAM.tarX;
+      povTarget.tarY = BENCH_CAM.tarY;
+      povTarget.tarZ = BENCH_CAM.tarZ;
+      return;
+    }
+
+    selectedPlayerOnPitch = true;
 
     const pX = pl.x, pZ = -pl.y;
 
@@ -984,11 +1052,30 @@
       } else { ring.visible = false; }
     }
 
-    // Update follow-cam target
+    // Update follow-cam target & bench overlay
     if (playerPOVMode) updateFollowCamera(frameObj);
 
+    // Bench overlay: show only when POV is on and player is off-pitch
+    const benchOverlay = $("benchOverlay");
+    const benchNameEl  = $("benchOverlayName");
+    if (playerPOVMode && selectedSinglePlayer) {
+      const onPitch = (frameObj.player_data||[]).some(p => p.player_id === selectedSinglePlayer && p.x != null);
+      selectedPlayerOnPitch = onPitch;
+      if (benchOverlay) benchOverlay.style.display = onPitch ? "none" : "flex";
+      if (benchNameEl && !onPitch) benchNameEl.textContent = getPlayerFullName(selectedSinglePlayer, matchData);
+    } else {
+      if (benchOverlay) benchOverlay.style.display = "none";
+    }
+
+    // Update player card bench indicator for the selected player
+    if (selectedSinglePlayer) {
+      const onPitch = (frameObj.player_data||[]).some(p => p.player_id === selectedSinglePlayer && p.x != null);
+      const card = document.querySelector(`.playerCard[data-pid="${selectedSinglePlayer}"]`);
+      if (card) card.classList.toggle("onbench", !onPitch);
+    }
+
     const s = $("threeStatus");
-    if (s) s.textContent = `3D: ${active.size} jugadores${showBall?" + balón":""}${playerPOVMode?" 👁":""}`;
+    if (s) s.textContent = `3D: ${active.size} jugadores${showBall?" + balón":""}${playerPOVMode?(selectedPlayerOnPitch?" 👁":" 🪑 On bench"):""}`;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1325,16 +1412,23 @@
     // Update selected player stats in info bar
     if (selectedSinglePlayer) {
       const selPl=(frameObj.player_data||[]).find(p=>p.player_id===selectedSinglePlayer);
+      const bar=$("selInfoBar"), nm=$("selPlayerName");
       if (selPl&&selPl.x!=null) {
         const sx=numToComma(selPl.x+52.5,1), sy=numToComma(selPl.y+34,1);
         let statsText=`Field pos: X=${sx} m, Y=${sy} m`;
-
         // Add speed if in speed mode
         if (labelMode==="speed") {
           const kin=smoothState.get(`p:${selectedSinglePlayer}`);
           if (kin&&isFinite(kin.speedKmh)) statsText+=`  ·  ${kin.speedKmh.toFixed(1)} km/h`;
         }
         if ($("selPlayerStats")) $("selPlayerStats").textContent=statsText;
+        if (bar)  { bar.style.background=""; bar.style.borderColor=""; }
+        if (nm)   nm.style.color="";
+      } else {
+        // Player not in this frame — on the bench
+        if ($("selPlayerStats")) $("selPlayerStats").textContent="🪑 Not on the pitch — currently on the bench";
+        if (bar)  { bar.style.background="#fff8f0"; bar.style.borderColor="#ff9900"; }
+        if (nm)   nm.style.color="#cc6600";
       }
     }
 
