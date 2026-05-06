@@ -310,6 +310,9 @@
     <!-- Follow-cam toggle -->
     <button id="povToggleBtn" title="Toggle follow-camera for selected player" disabled>👁 Follow Cam: OFF</button>
 
+    <!-- Pitch Control 3D overlay toggle -->
+    <button id="pcOverlayBtn" title="Project Pitch Control heatmap onto 3D pitch">🔥 PC Overlay: OFF</button>
+
     <div class="inlineField"><label>X</label><input id="camX" type="number" step="0.1" value="0" /></div>
     <div class="inlineField"><label>Y</label><input id="camY" type="number" step="0.1" value="0" /></div>
     <div class="inlineField"><label>Z</label><input id="camZ" type="number" step="0.1" value="0" /></div>
@@ -526,6 +529,7 @@
   const BENCH_CAM = { camX: 0, camY: 10, camZ: -(pitchH / 2 + 18), tarX: 0, tarY: 1, tarZ: 0 };
 
   let selectedPlayerOnPitch = true; // updated each rendered frame
+  let pcOverlayEnabled = false;      // PC heatmap projected onto 3D pitch
 
   function lerpNum(a, b, t) {
     if (a === null || a === undefined || !isFinite(a)) return b;
@@ -703,6 +707,20 @@
       new THREE.MeshStandardMaterial({map:makePitchTexture(),roughness:1,metalness:0})
     );
     pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
+
+    // Pitch Control heatmap overlay (live CanvasTexture updated each frame)
+    const pcOffCanvas = document.createElement("canvas");
+    pcOffCanvas.width = PC_PARAMS.gridX; pcOffCanvas.height = PC_PARAMS.gridY;
+    const pcTex = new THREE.CanvasTexture(pcOffCanvas);
+    pcTex.magFilter = THREE.LinearFilter; pcTex.minFilter = THREE.LinearFilter;
+    const pcOverlayMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(pitchW, pitchH, 1, 1),
+      new THREE.MeshBasicMaterial({map: pcTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 1})
+    );
+    pcOverlayMesh.rotation.x = -Math.PI/2; pcOverlayMesh.position.y = 0.005;
+    pcOverlayMesh.visible = false;
+    scene.add(pcOverlayMesh);
+    three.pcCanvas = pcOffCanvas; three.pcTex = pcTex; three.pcMesh = pcOverlayMesh;
 
     const borderMesh=new THREE.Mesh(
       new THREE.PlaneGeometry(pitchW+2,pitchH+2,1,1),
@@ -1468,6 +1486,16 @@
       img.data[idx]=r; img.data[idx+1]=g2; img.data[idx+2]=b; img.data[idx+3]=Math.round(alpha*255);
     }
     heatCtx2.putImageData(img, 0, 0);
+
+    // Push heatmap to 3D overlay texture
+    if (three.ready && three.pcTex && three.pcCanvas) {
+      const ctx3d = three.pcCanvas.getContext("2d");
+      ctx3d.clearRect(0, 0, three.pcCanvas.width, three.pcCanvas.height);
+      ctx3d.drawImage(heatOff, 0, 0, three.pcCanvas.width, three.pcCanvas.height);
+      three.pcTex.needsUpdate = true;
+      if (three.pcMesh) three.pcMesh.visible = pcOverlayEnabled;
+    }
+
     ctxPC.save(); ctxPC.imageSmoothingEnabled=true;
     if ("imageSmoothingQuality" in ctxPC) ctxPC.imageSmoothingQuality="high";
     ctxPC.drawImage(heatOff, 0, 0, canvasPC.width, canvasPC.height);
@@ -2016,6 +2044,17 @@
   $("manualPlusBtn").addEventListener("click",()=>manualVideoSeekDelta(+0.1,true));
   const mv=$("manualVideoPlayer");
   if(mv){ ["timeupdate","seeked","loadedmetadata","play","pause"].forEach(ev=>mv.addEventListener(ev,updateManualVideoBadge)); }
+
+  // PC heatmap overlay on 3D pitch
+  $("pcOverlayBtn").addEventListener("click", () => {
+    pcOverlayEnabled = !pcOverlayEnabled;
+    if (three.pcMesh) three.pcMesh.visible = pcOverlayEnabled;
+    const btn = $("pcOverlayBtn");
+    btn.textContent = pcOverlayEnabled ? "🔥 PC Overlay: ON" : "🔥 PC Overlay: OFF";
+    btn.style.background = pcOverlayEnabled ? "#e65c00" : "";
+    btn.style.color      = pcOverlayEnabled ? "#fff" : "";
+    btn.style.borderColor= pcOverlayEnabled ? "#e65c00" : "";
+  });
 
   // POV follow-cam toggle
   $("povToggleBtn").addEventListener("click", ()=>{
