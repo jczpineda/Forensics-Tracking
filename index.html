@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>3D Football Tracking – Player Perspective</title>
+  <title>Forensics Tracking</title>
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6.0.4/dist/d3-delaunay.min.js"></script>
@@ -207,6 +207,8 @@
 </head>
 
 <body>
+
+<h1 style="max-width:1200px;margin:0 0 12px 0;font-size:1.6rem;font-weight:700;letter-spacing:0.03em;">Forensics Tracking</h1>
 
 <!-- ═══════════ FILE INPUTS + TIME CONTROLS ═══════════ -->
 <div class="card">
@@ -1505,10 +1507,17 @@
     const rPt = 5;
     ctxPC.font = "16px system-ui,-apple-system,Segoe UI,Roboto,Arial"; ctxPC.textBaseline = "middle";
     for (const p of playerDrawData) {
-      ctxPC.beginPath(); ctxPC.arc(p.cx, p.cy, rPt, 0, Math.PI*2); ctxPC.fillStyle=p.color; ctxPC.fill();
+      if (p.isSel) {
+        // Gold selection ring
+        ctxPC.beginPath(); ctxPC.arc(p.cx, p.cy, rPt+6, 0, Math.PI*2);
+        ctxPC.strokeStyle="#ffd700"; ctxPC.lineWidth=3; ctxPC.stroke();
+        ctxPC.beginPath(); ctxPC.arc(p.cx, p.cy, rPt+2, 0, Math.PI*2); ctxPC.fillStyle=p.color; ctxPC.fill();
+      } else {
+        ctxPC.beginPath(); ctxPC.arc(p.cx, p.cy, rPt, 0, Math.PI*2); ctxPC.fillStyle=p.color; ctxPC.fill();
+      }
       if (p.label) {
         ctxPC.lineWidth=4; ctxPC.strokeStyle="rgba(255,255,255,0.92)"; ctxPC.strokeText(p.label, p.cx+12, p.cy-10);
-        ctxPC.fillStyle="rgba(0,0,0,0.92)"; ctxPC.fillText(p.label, p.cx+12, p.cy-10);
+        ctxPC.fillStyle=p.isSel?"#b8860b":"rgba(0,0,0,0.92)"; ctxPC.fillText(p.label, p.cx+12, p.cy-10);
       }
     }
     if (ballDrawData) {
@@ -1582,7 +1591,7 @@
       vorPointColors.push(color); vorPointLabels.push(labelToShow);
 
       const [pcx,pcy]=toCanvasXY(x,y,"pc");
-      playerDrawData.push({cx:pcx, cy:pcy, color, label:labelToShow});
+      playerDrawData.push({cx:pcx, cy:pcy, color, label:labelToShow, isSel});  
     });
 
     const b=frameObj.ball_data||{};
