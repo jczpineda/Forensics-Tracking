@@ -208,44 +208,44 @@
 
 <body>
 
-<h1 style="max-width:1200px;margin:0 0 12px 0;font-size:1.6rem;font-weight:700;letter-spacing:0.03em;">Forensics Tracking</h1>
+<h1 style="max-width:1200px;margin:0 0 12px 0;font-size:1.6rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;">Forensics Tracking</h1>
 
 <!-- ═══════════ FILE INPUTS + TIME CONTROLS ═══════════ -->
 <div class="card">
   <div class="row">
     <div>
-      <label>1) Metadatos (match.json)</label>
+      <label>1) Metadata (match.json)</label>
       <input id="matchFile" type="file" accept=".json,application/json" />
     </div>
     <div>
-      <label>2) Tracking (posicionales .jsonl)</label>
+      <label>2) Tracking (positional .jsonl)</label>
       <input id="trackingFile" type="file" accept=".jsonl,.txt,application/json" />
     </div>
     <div>
-      <label>3) Imagen de campo (png/jpg)</label>
+      <label>3) Pitch Image (png/jpg)</label>
       <input id="pitchImgFile" type="file" accept="image/png,image/jpeg" />
     </div>
 
     <div>
-      <label>Periodo</label>
+      <label>Period</label>
       <select id="period">
         <option value="1">1</option><option value="2">2</option>
         <option value="3">3</option><option value="4">4</option>
       </select>
     </div>
     <div><label>Min</label><input id="min" type="number" step="1" value="10" /></div>
-    <div><label>Seg</label><input id="sec" type="number" step="1" value="0" /></div>
-    <div><label>Décima (0–9)</label><input id="tenth" type="number" step="1" value="0" /></div>
-    <div><label>Color local</label><input id="homeColor" type="color" value="#0066ff" /></div>
-    <div><label>Color visitante</label><input id="awayColor" type="color" value="#ff2b2b" /></div>
+    <div><label>Sec</label><input id="sec" type="number" step="1" value="0" /></div>
+    <div><label>Tenth (0–9)</label><input id="tenth" type="number" step="1" value="0" /></div>
+    <div><label>Home Color</label><input id="homeColor" type="color" value="#0066ff" /></div>
+    <div><label>Away Color</label><input id="awayColor" type="color" value="#ff2b2b" /></div>
 
     <div class="actions">
-      <button id="okBtn">OK → Hacer PDF</button>
-      <button id="plusBtn" title="+0,10s">+0,10s</button>
-      <button id="minusBtn" title="-0,10s">-0,10s</button>
+      <button id="okBtn">OK → Export PDF</button>
+      <button id="plusBtn" title="+0.10s">+0.10s</button>
+      <button id="minusBtn" title="-0.10s">-0.10s</button>
       <button id="playBtn">▶ Play</button>
       <button id="pauseBtn">⏸ Pause</button>
-      <span id="playStatus" class="badge">Play: parado</span>
+      <span id="playStatus" class="badge">Play: stopped</span>
     </div>
 
     <div class="actions" style="margin-top:4px;">
@@ -261,33 +261,40 @@
   </div>
 
   <div class="hint">
-    - Datos cada <b>0,10s</b> (10 Hz) → 1 décima = 1 frame.<br/>
-    - Transformación: <b>x + 52,5</b> y <b>y + 34</b>.<br/>
-    - <b>Click en el canvas 2D</b> para seleccionar un jugador.
-    <div class="small">En Play se usa streaming secuencial del .jsonl. Vídeo adjunto NO sincronizado con coords.</div>
+    - Data every <b>0.10s</b> (10 Hz) → 1 tenth = 1 frame.<br/>
+    - Transform: <b>x + 52.5</b> and <b>y + 34</b>.<br/>
+    - <b>Click on the 2D canvas</b> to select a player.
+    <div class="small">During Play, sequential streaming of the .jsonl is used. Attached video is NOT synced with coordinates.</div>
   </div>
   <div id="status" class="status"></div>
 </div>
 
+<!-- 2D + 3D SIDE BY SIDE -->
 <!-- 2D CANVASES -->
 <div id="canvasClickHint" style="display:none;">💡 Click on a player dot to select them and enable Follow Cam perspective.</div>
-<canvas id="pitchCanvas" width="1400" height="907"></canvas>
+<div style="max-width:1200px;margin-top:8px;display:flex;gap:8px;align-items:center;">
+  <span style="font-size:12px;font-weight:600;color:#333;">2D Overlay:</span>
+  <div class="lmGroup">
+    <button id="mapModeVorBtn" class="active" data-mapmode="voronoi">Voronoi</button>
+    <button id="mapModePCBtn" data-mapmode="pitchcontrol">Pitch Control</button>
+    <button id="mapModeOffBtn" data-mapmode="off">Off</button>
+  </div>
+</div>
 <canvas id="pitchCanvasVor" width="1400" height="907"></canvas>
-<div style="margin-top:6px;max-width:1200px;font-size:12px;font-weight:600;color:#333;">Pitch Control (Spearman-style)</div>
-<canvas id="pitchCanvasPC" width="1400" height="907"></canvas>
+<canvas id="pitchCanvasPC" width="1400" height="907" style="display:none;"></canvas>
 
-<!-- ═══════════ 3D VIEW ═══════════ -->
+<!-- ═════════ 3D VIEW ═════════ -->
 <div class="threeWrap">
   <div class="threeHeader">
     <div>
-      <div class="sectionTitle" style="margin-top:0;">Vista 3D (dron) — campo 105×68</div>
-      <div class="small">Arrastrar = rotar · rueda = zoom · botón derecho = desplazar. Jugadores ≈ 1,80 m.</div>
+      <div class="sectionTitle" style="margin-top:0;">3D View (drone) — 105×68m pitch</div>
+      <div class="small">Drag = rotate · scroll = zoom · right-click = pan. Players ≈ 1.80 m.</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <div id="povPlayerBadge" class="badge" style="display:none;background:#1a1a2e;color:#ffd700;border-color:#ffd700;">
         👤 <span id="povPlayerBadgeName"></span>
       </div>
-      <div class="small" id="threeStatus">3D: inicializando…</div>
+      <div class="small" id="threeStatus">3D: initializing…</div>
     </div>
   </div>
 
@@ -307,7 +314,7 @@
 
   <div class="threeControls">
     <button id="rec3dBtn">⏺ REC 3D</button>
-    <span class="badge" id="rec3dBadge">REC 3D: parado</span>
+    <span class="badge" id="rec3dBadge">REC 3D: stopped</span>
 
     <!-- Follow-cam toggle -->
     <button id="povToggleBtn" title="Toggle follow-camera for selected player" disabled>👁 Follow Cam: OFF</button>
@@ -319,9 +326,9 @@
     <div class="inlineField"><label>Y</label><input id="camY" type="number" step="0.1" value="0" /></div>
     <div class="inlineField"><label>Z</label><input id="camZ" type="number" step="0.1" value="0" /></div>
     <div class="inlineField"><label>Zoom</label><input id="camZoom" type="number" min="1" step="1" value="90" /></div>
-    <div class="inlineField"><label>Áng. horiz</label><input id="camYaw" type="number" min="0" max="360" step="1" value="45" /></div>
-    <div class="inlineField"><label>Áng. vert</label><input id="camPitch" type="number" min="0" max="360" step="1" value="25" /></div>
-    <span class="small" id="camHint">Sincronizado con el ratón (OrbitControls).</span>
+    <div class="inlineField"><label>H. Angle</label><input id="camYaw" type="number" min="0" max="360" step="1" value="45" /></div>
+    <div class="inlineField"><label>V. Angle</label><input id="camPitch" type="number" min="0" max="360" step="1" value="25" /></div>
+    <span class="small" id="camHint">Synced with mouse (OrbitControls).</span>
   </div>
 </div>
 
@@ -357,50 +364,50 @@
 <!-- ═══════════ CONTROLS + TABLE + VIDEO ═══════════ -->
 <div class="tableWrap">
   <div class="row" style="justify-content: space-between; align-items:center;">
-    <div><div class="small">Controles Voronoi (tiempo / colores / vídeo / CSV / XLSX):</div></div>
+    <div><div class="small">Controls (time / colors / video / CSV / XLSX):</div></div>
     <div class="rightActions">
       <div class="timeMini">
         <div class="inlineField">
-          <label>Periodo</label>
+          <label>Period</label>
           <select id="period2">
             <option value="1">1</option><option value="2">2</option>
             <option value="3">3</option><option value="4">4</option>
           </select>
         </div>
         <div class="inlineField"><label>Min</label><input id="min2" type="number" step="1" value="10" /></div>
-        <div class="inlineField"><label>Seg</label><input id="sec2" type="number" step="1" value="0" /></div>
-        <div class="inlineField"><label>Déc.</label><input id="tenth2" type="number" step="1" value="0" /></div>
+        <div class="inlineField"><label>Sec</label><input id="sec2" type="number" step="1" value="0" /></div>
+        <div class="inlineField"><label>10th</label><input id="tenth2" type="number" step="1" value="0" /></div>
         <span id="tsBadge2" class="badge">⏱ 10:00.0</span>
       </div>
       <div class="colorMini">
-        <div class="inlineField"><label>Local</label><input id="homeColor2" type="color" value="#0066ff" /></div>
-        <div class="inlineField"><label>Visit.</label><input id="awayColor2" type="color" value="#ff2b2b" /></div>
+        <div class="inlineField"><label>Home</label><input id="homeColor2" type="color" value="#0066ff" /></div>
+        <div class="inlineField"><label>Away</label><input id="awayColor2" type="color" value="#ff2b2b" /></div>
       </div>
       <div class="inlineField">
-        <label for="videoDuration">Duración (s)</label>
+        <label for="videoDuration">Duration (s)</label>
         <input id="videoDuration" type="number" min="1" step="1" value="10" />
       </div>
-      <button id="videoPlainBtn">🎥 Vídeo</button>
-      <button id="videoVorBtn">🎥 Vídeo Voronoi</button>
-      <button id="videoPcBtn">🎥 Vídeo PC</button>
-      <button id="plusBtn2" title="+0,10s">+0,10s</button>
-      <button id="minusBtn2" title="-0,10s">-0,10s</button>
+      <button id="videoPlainBtn">🎥 Video</button>
+      <button id="videoVorBtn">🎥 Voronoi Video</button>
+      <button id="videoPcBtn">🎥 PC Video</button>
+      <button id="plusBtn2" title="+0.10s">+0.10s</button>
+      <button id="minusBtn2" title="-0.10s">-0.10s</button>
       <button id="playBtn2">▶ Play</button>
       <button id="pauseBtn2">⏸ Pause</button>
       <button id="csvBtn" disabled>CSV</button>
       <button id="xlsxPosBtn" disabled>⬇️ XLSX Pos</button>
-      <button id="xlsxPhysBtn" disabled>⬇️ XLSX Fís</button>
+      <button id="xlsxPhysBtn" disabled>⬇️ XLSX Phys</button>
     </div>
   </div>
 
   <div class="videoAttach">
     <div class="row" style="align-items:flex-end;">
       <div>
-        <div class="sectionTitle" style="margin-top:0;">Vídeo adjunto (manual) DESINCRONIZADO</div>
-        <div class="small">Tiempo propio. No sincronizado con coordenadas/Voronoi. Recibe ▶/⏸ y ±0,10s.</div>
+        <div class="sectionTitle" style="margin-top:0;">Attached Video (manual) — UNSYNCHRONIZED</div>
+        <div class="small">Own timeline. Not synced with coordinates/Voronoi. Responds to ▶/⏸ and ±0.10s.</div>
       </div>
       <div>
-        <label>Adjuntar vídeo</label>
+        <label>Attach video</label>
         <input id="manualVideoFile" type="file" accept="video/*" />
       </div>
     </div>
@@ -409,29 +416,29 @@
       <button id="manualMinusBtn">-0,10s</button>
       <button id="manualPlusBtn">+0,10s</button>
       <span id="manualTsBadge" class="badge">🎬 00:00.0</span>
-      <span class="small" id="videoSyncHint" style="display:none;">Tip: si Play no inicia el vídeo por políticas del navegador, pulsa Play en el vídeo una vez.</span>
+      <span class="small" id="videoSyncHint" style="display:none;">Tip: if Play does not start the video due to browser policies, press Play on the video once.</span>
     </div>
   </div>
 
   <div id="csvFallback" class="small" style="display:none; margin-top:6px;">
-    Descarga bloqueada. Prueba: <a id="csvLink" target="_blank" rel="noopener">Abrir CSV</a>
-    <span> o copia/pega el contenido:</span>
+    Download blocked. Try: <a id="csvLink" target="_blank" rel="noopener">Open CSV</a>
+    <span> or copy/paste the content:</span>
   </div>
   <div id="videoFallback" class="small" style="display:none; margin-top:6px;">
-    <a id="videoLink" target="_blank" rel="noopener">Abrir vídeo</a>
+    <a id="videoLink" target="_blank" rel="noopener">Open video</a>
   </div>
   <div id="video3dFallback" class="small" style="display:none; margin-top:6px;">
-    <a id="video3dLink" target="_blank" rel="noopener">Abrir vídeo 3D</a>
+    <a id="video3dLink" target="_blank" rel="noopener">Open 3D video</a>
   </div>
 
   <div id="tableContainer" style="margin-top:10px;"></div>
 
   <div id="csvTextWrap" style="display:none; margin-top:10px;">
-    <div class="small" style="margin-bottom:6px;">CSV generado (copia y pega en .csv si no descarga):</div>
+    <div class="small" style="margin-bottom:6px;">CSV generated (copy and paste into a .csv file if download fails):</div>
     <textarea id="csvText" spellcheck="false"></textarea>
   </div>
 
-  <div class="sectionTitle">Tabla simple (Nombre, X, Y)</div>
+  <div class="sectionTitle">Simple Table (Name, X, Y)</div>
   <div id="tableSimpleContainer" style="margin-top:8px;"></div>
 </div>
 
@@ -441,8 +448,6 @@
   const $ = (id) => document.getElementById(id);
   const statusEl = $("status");
 
-  const canvas    = $("pitchCanvas");
-  const ctx       = canvas.getContext("2d");
   const canvasVor = $("pitchCanvasVor");
   const ctxVor    = canvasVor.getContext("2d");
   const canvasPC  = $("pitchCanvasPC");
@@ -500,6 +505,7 @@
 
   let labelMode = "name";
   let showBall  = true;
+  let mapMode2D = "voronoi"; // "voronoi" | "pitchcontrol"
   let selectedPlayerIds = null;   // null = show all (original filter, not used in this UI)
 
   const frameCache = new Map();
@@ -677,9 +683,9 @@
 
   function init3D() {
     const status=$("threeStatus"), container=$("threeContainer");
-    if (!container) { if(status) status.textContent="3D: no hay contenedor."; return; }
-    if (!window.THREE) { if(status) status.textContent="3D: THREE no cargó."; return; }
-    if (!THREE.OrbitControls) { if(status) status.textContent="3D: OrbitControls no cargó."; return; }
+    if (!container) { if(status) status.textContent="3D: no container."; return; }
+    if (!window.THREE) { if(status) status.textContent="3D: THREE.js failed to load."; return; }
+    if (!THREE.OrbitControls) { if(status) status.textContent="3D: OrbitControls failed to load."; return; }
 
     three.container=container;
     const scene=new THREE.Scene(); scene.background=new THREE.Color("#e6e6e6");
@@ -758,7 +764,7 @@
     animate();
 
     init3DCameraUI();
-    if (status) status.textContent="3D: listo (OrbitControls + táctil).";
+    if (status) status.textContent="3D: ready (OrbitControls + touch).";
   }
 
   // ── Follow-cam smooth update (called every RAF) ──────────────────────────
@@ -998,7 +1004,7 @@
     } else {
       if (btn)     { btn.textContent = "👁 Follow Cam: OFF"; btn.classList.remove("povActive"); }
       if (overlay) overlay.style.display = "none";
-      if (hint)    hint.textContent = "Sincronizado con el ratón (OrbitControls).";
+      if (hint)    hint.textContent = "Synced with mouse (OrbitControls).";
 
       if (three.controls) three.controls.enabled = true;
       log("👁 Follow Cam OFF.");
@@ -1118,7 +1124,7 @@
     }
 
     const s = $("threeStatus");
-    if (s) s.textContent = `3D: ${active.size} jugadores${showBall?" + balón":""}${playerPOVMode?(selectedPlayerOnPitch?" 👁":" 🪑 On bench"):""}`;
+    if (s) s.textContent = `3D: ${active.size} players${showBall?" + ball":""}${playerPOVMode?(selectedPlayerOnPitch?" 👁":" 🪑 On bench"):""}`;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1175,7 +1181,7 @@
       const url=URL.createObjectURL(file);
       const img=new Image();
       img.onload=()=>{ URL.revokeObjectURL(url); resolve(img); };
-      img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error("No se pudo cargar la imagen del campo.")); };
+      img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error("Could not load the pitch image.")); };
       img.src=url;
     });
   }
@@ -1246,19 +1252,19 @@
     }
   }
 
-  function toCanvasXY(x,y,which="main") {
-    const c=(which==="pc")?canvasPC:(which==="vor")?canvasVor:canvas;
+  function toCanvasXY(x,y,which="vor") {
+    const c=(which==="pc")?canvasPC:canvasVor;
     return [x*(c.width/pitchW), (pitchH-y)*(c.height/pitchH)];
   }
 
-  function drawPitchImageBase(which="main") {
-    const c=(which==="pc")?canvasPC:(which==="vor")?canvasVor:canvas;
-    const cctx=(which==="pc")?ctxPC:(which==="vor")?ctxVor:ctx;
+  function drawPitchImageBase(which="vor") {
+    const c=(which==="pc")?canvasPC:canvasVor;
+    const cctx=(which==="pc")?ctxPC:ctxVor;
     cctx.clearRect(0,0,c.width,c.height);
     if (!pitchImg) {
       cctx.fillStyle="#0b7a2a"; cctx.fillRect(0,0,c.width,c.height);
       cctx.fillStyle="rgba(255,255,255,0.9)"; cctx.font="18px system-ui";
-      cctx.fillText("Sube una imagen de campo (png/jpg).",18,34);
+      cctx.fillText("Upload a pitch image (png/jpg).",18,34);
       return;
     }
     cctx.drawImage(pitchImg,0,0,c.width,c.height);
@@ -1279,17 +1285,17 @@
 
   function renderTable(rows) {
     const c=$("tableContainer");
-    if (!rows||!rows.length) { c.innerHTML="<div class='small'>No hay datos.</div>"; return; }
-    let html="<table><thead><tr><th>Tipo</th><th>Equipo</th><th>Nombre</th><th>X</th><th>Y</th></tr></thead><tbody>";
+    if (!rows||!rows.length) { c.innerHTML="<div class='small'>No data.</div>"; return; }
+    let html="<table><thead><tr><th>Type</th><th>Team</th><th>Name</th><th>X</th><th>Y</th></tr></thead><tbody>";
     for (const r of rows)
       html+=`<tr><td>${escHtml(r.type)}</td><td>${escHtml(r.team)}</td><td>${escHtml(r.name)}</td><td>${escHtml(r.x)}</td><td>${escHtml(r.y)}</td></tr>`;
     c.innerHTML=html+"</tbody></table>";
   }
   function renderTableSimple(rows) {
     const c=$("tableSimpleContainer");
-    if (!rows||!rows.length) { c.innerHTML="<div class='small'>No hay datos.</div>"; return; }
+    if (!rows||!rows.length) { c.innerHTML="<div class='small'>No data.</div>"; return; }
     const simple=rows.filter(r=>r.name).map(r=>({name:r.name,x:r.x,y:r.y}));
-    let html="<table><thead><tr><th>Nombre</th><th>X</th><th>Y</th></tr></thead><tbody>";
+    let html="<table><thead><tr><th>Name</th><th>X</th><th>Y</th></tr></thead><tbody>";
     for (const r of simple)
       html+=`<tr><td>${escHtml(r.name)}</td><td>${escHtml(r.x)}</td><td>${escHtml(r.y)}</td></tr>`;
     c.innerHTML=html+"</tbody></table>";
@@ -1341,7 +1347,7 @@
   // ─────────────────────────────────────────────────────────────────────────
   function drawVoronoi(pointsPx, pointColors, pointLabels, ballPxOrNull) {
     drawPitchImageBase("vor");
-    if (pointsPx?.length>=2 && window.d3?.Delaunay) {
+    if (mapMode2D === "voronoi" && pointsPx?.length>=2 && window.d3?.Delaunay) {
       const delaunay=d3.Delaunay.from(pointsPx), vor=delaunay.voronoi([0,0,canvasVor.width,canvasVor.height]);
       ctxVor.save(); ctxVor.globalAlpha=0.28;
       for (let i=0;i<pointsPx.length;i++) {
@@ -1535,12 +1541,10 @@
   function plotFrame(matchData, frameObj, colors, prevObjOrNull, prev2ObjOrNull) {
     lastFrameObj = frameObj;  // save for canvas click & POV
 
-    drawPitchImageBase("main");
+    drawPitchImageBase("vor");
     const homeId=matchData.home_team?.id, homeName=matchData.home_team?.name||"Home", awayName=matchData.away_team?.name||"Away";
     const pMap=buildPlayerMaps(matchData);
     const r=5, labelDx=0.8, labelDy=0.8;
-
-    ctx.font="16px system-ui,-apple-system,Segoe UI,Roboto,Arial"; ctx.textBaseline="middle";
 
     const tableRows=[], vorPointsPx=[], vorPointColors=[], vorPointLabels=[];
     const playerDrawData = [];   // shared with Pitch Control canvas
@@ -1560,18 +1564,6 @@
       const color=isHome?colors.home:colors.away;
       const isSel=(pl.player_id===selectedSinglePlayer);
 
-      const [cx,cy]=toCanvasXY(x,y,"main");
-
-      if (isSel) {
-        // Gold selection ring
-        ctx.beginPath(); ctx.arc(cx,cy,r+7,0,Math.PI*2);
-        ctx.strokeStyle="#ffd700"; ctx.lineWidth=3; ctx.stroke();
-        // Slightly larger dot
-        ctx.beginPath(); ctx.arc(cx,cy,r+2,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
-      } else {
-        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
-      }
-
       let labelToShow=info.baseLabel;
       if (labelMode!=="name") {
         const p0=currPos.get(pl.player_id), p1=prevPos?prevPos.get(pl.player_id):null, p2=prev2Pos?prev2Pos.get(pl.player_id):null;
@@ -1580,11 +1572,7 @@
         labelToShow=labelForMode(info.baseLabel,kin)||info.baseLabel;
       }
 
-      const [lx,ly]=toCanvasXY(x+labelDx,y+labelDy,"main");
-      ctx.lineWidth=4; ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.strokeText(labelToShow,lx,ly);
-      ctx.fillStyle=isSel?"#b8860b":"rgba(0,0,0,0.9)"; ctx.fillText(labelToShow,lx,ly);
-
-      tableRows.push({type:"Jugador",team:isHome?homeName:awayName,name:info.fullName||info.baseLabel,x:numToComma(x,2),y:numToComma(y,2)});
+      tableRows.push({type:"Player",team:isHome?homeName:awayName,name:info.fullName||info.baseLabel,x:numToComma(x,2),y:numToComma(y,2)});
 
       const [vx,vy]=toCanvasXY(x,y,"vor");
       vorPointsPx.push([vx,vy]); vorPointsPx._pids.push(pl.player_id);
@@ -1598,17 +1586,12 @@
     let ballVorPx=null, ballDrawData=null;
     if (showBall&&b.x!=null&&b.y!=null) {
       const x=b.x+52.5, y=b.y+34;
-      const [cx,cy]=toCanvasXY(x,y,"main");
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle="#000"; ctx.fill();
-      const [lx,ly]=toCanvasXY(x+0.8,y+0.8,"main");
-      ctx.lineWidth=4; ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.strokeText("ball",lx,ly);
-      ctx.fillStyle="rgba(0,0,0,0.9)"; ctx.fillText("ball",lx,ly);
       ballVorPx=toCanvasXY(x,y,"vor");
       const [bpx,bpy]=toCanvasXY(x,y,"pc");
       ballDrawData={cx:bpx, cy:bpy, label:"ball"};
-      tableRows.push({type:"Balón",team:"-",name:"ball",x:numToComma(x,2),y:numToComma(y,2)});
+      tableRows.push({type:"Ball",team:"-",name:"ball",x:numToComma(x,2),y:numToComma(y,2)});
     } else {
-      tableRows.push({type:"Balón",team:"-",name:"ball",x:"",y:""});
+      tableRows.push({type:"Ball",team:"-",name:"ball",x:"",y:""});
     }
 
     lastTableRows=tableRows;
@@ -1671,7 +1654,6 @@
       let dW=availW, dH=dW/aspect; if(dH>availH){dH=availH;dW=dH*aspect;}
       doc.addImage(imgData,"PNG",margin+(availW-dW)/2,margin+headerH+gap+(availH-dH)/2,dW,dH,undefined,"FAST");
     }
-    drawHeader("Vista"); addCanvasPage(canvas);
     doc.addPage(); drawHeader("Voronoi"); addCanvasPage(canvasVor);
     doc.addPage(); drawHeader("Pitch Control"); addCanvasPage(canvasPC);
     doc.save(`tracking_${timestampStr.replace(/[:]/g,"-")}.pdf`);
@@ -1684,7 +1666,7 @@
   function csvEscape(v) { const s=String(v??""); return /[;"\n\r]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }
   function buildCsvString() {
     if (!lastTableRows||!lastTableRows.length) return "";
-    return [["Tipo","Equipo","Nombre","X","Y"].map(csvEscape).join(CSV_SEP),
+    return [["Type","Team","Name","X","Y"].map(csvEscape).join(CSV_SEP),
             ...lastTableRows.map(r=>[r.type,r.team,r.name,r.x,r.y].map(csvEscape).join(CSV_SEP))].join("\n");
   }
 
@@ -1693,7 +1675,7 @@
     $("csvFallback").style.display="none"; $("csvTextWrap").style.display="none";
     if (currentCsvBlobUrl){try{URL.revokeObjectURL(currentCsvBlobUrl);}catch(e){} currentCsvBlobUrl=null;}
     const csv=buildCsvString(); if(!csv) return;
-    const fname=`coordenadas_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.csv`;
+    const fname=`coordinates_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.csv`;
     $("csvText").value=csv; $("csvTextWrap").style.display="block";
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
     const blobUrl=URL.createObjectURL(blob); currentCsvBlobUrl=blobUrl;
@@ -1704,19 +1686,19 @@
   }
 
   function exportXlsxPos() {
-    if (!lastTableRows||!lastTableRows.length) { log("No hay datos para exportar."); return; }
-    const ws_data=[["Tipo","Equipo","Nombre","X","Y"],...lastTableRows.map(r=>[r.type,r.team,r.name,r.x,r.y])];
+    if (!lastTableRows||!lastTableRows.length) { log("No data to export."); return; }
+    const ws_data=[["Type","Team","Name","X","Y"],...lastTableRows.map(r=>[r.type,r.team,r.name,r.x,r.y])];
     const wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(ws_data);
-    XLSX.utils.book_append_sheet(wb,ws,"Posiciones");
-    XLSX.writeFile(wb,`posiciones_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.xlsx`);
-    log("✅ XLSX posiciones exportado.");
+    XLSX.utils.book_append_sheet(wb,ws,"Positions");
+    XLSX.writeFile(wb,`positions_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.xlsx`);
+    log("✅ XLSX positions exported.");
   }
 
   function exportXlsxPhys() {
-    if (!lastTableRows||!lastTableRows.length) { log("No hay datos para exportar."); return; }
-    const rows=[["Nombre","Speed (km/h)","Accel (m/s²)","Angle (º)"]];
+    if (!lastTableRows||!lastTableRows.length) { log("No data to export."); return; }
+    const rows=[["Name","Speed (km/h)","Accel (m/s²)","Angle (º)"]];
     for (const r of lastTableRows) {
-      if (r.type!=="Jugador") continue;
+      if (r.type!=="Player") continue;
       // Find player ID from name
       let pid=null;
       if (matchDataCache) {
@@ -1733,9 +1715,9 @@
         kin&&isFinite(kin.dAng)?Number(Math.abs(kin.dAng).toFixed(1)):""]);
     }
     const wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb,ws,"Fisica");
-    XLSX.writeFile(wb,`fisica_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.xlsx`);
-    log("✅ XLSX física exportado.");
+    XLSX.utils.book_append_sheet(wb,ws,"Physics");
+    XLSX.writeFile(wb,`physics_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}.xlsx`);
+    log("✅ XLSX physics exported.");
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1766,9 +1748,9 @@
   }
 
   async function ensureLoadedMatch() {
-    const matchFile=$("matchFile").files[0]; if(!matchFile) throw new Error("Sube match.json");
+    const matchFile=$("matchFile").files[0]; if(!matchFile) throw new Error("Upload match.json");
     if (!matchDataCache) {
-      log("Leyendo match.json…");
+      log("Reading match.json…");
       matchDataCache=await readJsonFile(matchFile);
       buildPlayerPanel(matchDataCache);  // ← populate player panel
     }
@@ -1778,7 +1760,7 @@
   function getPeriodStartFrame(matchData) {
     const period=parseInt($("period").value,10);
     const pObj=(matchData.match_periods||[]).find(p=>p.period===period);
-    if (!pObj) throw new Error(`No encuentro match_periods para period=${period}`);
+    if (!pObj) throw new Error(`Cannot find match_periods for period=${period}`);
     return pObj.start_frame??0;
   }
 
@@ -1792,20 +1774,20 @@
   }
 
   async function previewRender(noPdf=true) {
-    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Sube tracking.jsonl");return null;}
-    if (!pitchImg){log("❌ Sube la imagen de campo");return null;}
+    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Upload tracking.jsonl");return;}
+    if (!pitchImg){log("❌ Upload the pitch image");return null;}
     try {
       $("okBtn").disabled=true; $("plusBtn").disabled=true; $("minusBtn").disabled=true;
       const matchData=await ensureLoadedMatch();
       const {targetFrame,tsStr}=getTargetFrameFromInputs(matchData);
       const colors=getColors(); lastTimestampStr=tsStr;
-      log(`Buscando frame=${targetFrame} (${tsStr})…`);
+      log(`Searching for frame=${targetFrame} (${tsStr})…`);
       const frameObj=await getFrameCached(trackingFile,targetFrame);
-      if (!frameObj){log(`❌ Frame ${targetFrame} no encontrado. Revisa period/timestamp.`);return null;}
+      if (!frameObj){log(`❌ Frame ${targetFrame} not found. Check period/timestamp.`);return null;}
       const prev=await getFrameCached(trackingFile,targetFrame-1);
       const prev2=await getFrameCached(trackingFile,targetFrame-2);
       const header=plotFrame(matchData,frameObj,colors,prev,prev2);
-      log(noPdf?`✅ Vista actualizada (${tsStr}).`:`✅ Listo para PDF (${tsStr}).`);
+      log(noPdf?`✅ View updated (${tsStr}).`:`✅ Ready for PDF (${tsStr}).`);
       return {header,tsStr,colors};
     } catch(e){ console.error(e); log("❌ "+( e?.message||String(e))); return null; }
     finally { $("okBtn").disabled=false; $("plusBtn").disabled=false; $("minusBtn").disabled=false; }
@@ -1846,14 +1828,14 @@
     v.src=URL.createObjectURL(file); manualVideoBlobUrl=v.src;
     v.playsInline=true; v.preload="metadata";
     manualVideoPlayAnchorTime=0; manualVideoPlayElapsedTenths=0;
-    v.onloadedmetadata=()=>{try{v.currentTime=0;}catch(e){} updateManualVideoBadge(); log(`✅ Vídeo: ${file.name}`);};
-    v.onerror=()=>{log("❌ No se pudo cargar el vídeo adjuntado.");};
+    v.onloadedmetadata=()=>{try{v.currentTime=0;}catch(e){} updateManualVideoBadge(); log(`✅ Video: ${file.name}`);};
+    v.onerror=()=>{log("❌ Could not load the attached video.");};
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // PLAY / PAUSE
   // ─────────────────────────────────────────────────────────────────────────
-  function setPlayBadge(){$("playStatus").textContent=playTimerId?`Play: corriendo (${(playStepsLeft/10).toFixed(1)}s)`:"Play: parado";}
+  function setPlayBadge(){$("playStatus").textContent=playTimerId?`Play: running (${(playStepsLeft/10).toFixed(1)}s)`:"Play: stopped";}
 
   async function stopPlay(){
     if(playTimerId){clearInterval(playTimerId);playTimerId=null;}
@@ -1862,8 +1844,8 @@
 
   async function startPlay(){
     if (playTimerId) return;
-    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Sube tracking.jsonl");return;}
-    if (!pitchImg){log("❌ Sube la imagen de campo");return;}
+    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Upload tracking.jsonl");return;}
+    if (!pitchImg){log("❌ Upload the pitch image");return;}
     const v=$("manualVideoPlayer");
     manualVideoPlayElapsedTenths=0; manualVideoPlayAnchorTime=(v&&v.src)?(v.currentTime||0):0;
     manualVideoTryPlayNow();
@@ -1871,12 +1853,12 @@
     playStepsLeft=1200;
     const {targetFrame,tsStr}=getTargetFrameFromInputs(matchData); lastTimestampStr=tsStr;
     smoothState.clear();
-    log(`▶ Play: inicializando stream desde frame=${targetFrame}…`);
+    log(`▶ Play: initializing stream from frame=${targetFrame}…`);
     await startPlayStream(trackingFile); playStream.matchData=matchData;
     const firstPack=await playStreamReadUntilAtLeastFrame(targetFrame);
-    if (!firstPack||!firstPack.obj){log("❌ No se pudo leer JSONL.");await stopPlay();return;}
+    if (!firstPack||!firstPack.obj){log("❌ Could not read JSONL.");await stopPlay();return;}
     plotFrame(matchData,firstPack.obj,colors,null,null);
-    log(`✅ Play listo en ${tsStr}`);
+    log(`✅ Play ready at ${tsStr}`);
     playLastTick=performance.now(); setPlayBadge();
     let prev1=firstPack.obj, prev2=null;
 
@@ -1889,7 +1871,7 @@
         manualVideoPlayElapsedTenths+=steps; manualVideoSyncDuringPlay();
         const {targetFrame:df,tsStr:nts}=getTargetFrameFromInputs(matchData); lastTimestampStr=nts;
         const pack=await playStreamReadUntilAtLeastFrame(df);
-        if(!pack||!pack.obj){log("⚠️ Fin del JSONL durante Play.");await stopPlay();return;}
+        if(!pack||!pack.obj){log("⚠️ End of JSONL during playback.");await stopPlay();return;}
         const curr=pack.obj; plotFrame(matchData,curr,colors,prev1,prev2);
         prev2=prev1; prev1=curr; setPlayBadge(); if(playStepsLeft<=0)await stopPlay();
       } catch(e){console.error(e);await stopPlay();}
@@ -1906,25 +1888,25 @@
   }
 
   async function exportVideo({mode}){
-    if(isRecording){log("⚠️ Ya se está generando un vídeo.");return;}
-    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Sube tracking.jsonl");return;}
-    if(!pitchImg){log("❌ Sube la imagen de campo");return;}
+    if(isRecording){log("⚠️ A video is already being generated.");return;}
+    const trackingFile=$("trackingFile").files[0]; if(!trackingFile){log("❌ Upload tracking.jsonl");return;}
+    if(!pitchImg){log("❌ Upload the pitch image");return;}
     await stopPlay();
     const matchData=await ensureLoadedMatch(), colors=getColors();
     const {targetFrame,tsStr}=getTargetFrameFromInputs(matchData); lastTimestampStr=tsStr;
     const durationS=getVideoDurationSeconds(), fps=10, totalFrames=Math.max(1,Math.round(durationS*fps));
     $("videoFallback").style.display="none";
     if(currentVideoBlobUrl){try{URL.revokeObjectURL(currentVideoBlobUrl);}catch(e){} currentVideoBlobUrl=null;}
-    const recordCanvas=(mode==="voronoi")?canvasVor:(mode==="pitchcontrol")?canvasPC:canvas;
-    if(!recordCanvas.captureStream||!window.MediaRecorder){log("❌ Tu navegador no soporta captura de vídeo. Prueba Chrome/Edge.");return;}
+    const recordCanvas=(mode==="pitchcontrol")?canvasPC:canvasVor;
+    if(!recordCanvas.captureStream||!window.MediaRecorder){log("❌ Your browser does not support video capture. Try Chrome/Edge.");return;}
     const stream=recordCanvas.captureStream(fps), mimeType=guessMimeType(), options=mimeType?{mimeType}:undefined;
     let recorder; try{recorder=new MediaRecorder(stream,options);}catch(e){recorder=new MediaRecorder(stream);}
     const chunks=[]; recorder.ondataavailable=(ev)=>{if(ev.data&&ev.data.size)chunks.push(ev.data);};
     isRecording=true; $("videoVorBtn").disabled=true; $("videoPlainBtn").disabled=true; $("videoPcBtn").disabled=true;
-    log(`🎥 Generando vídeo (${durationS}s) desde ${tsStr}…`); smoothState.clear();
+    log(`🎥 Generating video (${durationS}s) from ${tsStr}…`); smoothState.clear();
     await startPlayStream(trackingFile);
     const fp=await playStreamReadUntilAtLeastFrame(targetFrame);
-    if(!fp||!fp.obj){await stopPlayStreamInternal();isRecording=false;$("videoVorBtn").disabled=false;$("videoPlainBtn").disabled=false;log("❌ No se pudo leer JSONL.");return;}
+    if(!fp||!fp.obj){await stopPlayStreamInternal();isRecording=false;$("videoVorBtn").disabled=false;$("videoPlainBtn").disabled=false;log("❌ Could not read JSONL.");return;}
     let prev1=fp.obj, prev2=null; plotFrame(matchData,fp.obj,colors,null,null);
     const startAt=performance.now(); recorder.start();
     for(let i=0;i<totalFrames;i++){
@@ -1943,17 +1925,17 @@
     const fname=`${base}_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}_${durationS}s.webm`;
     const a=document.createElement("a"); a.href=blobUrl; a.download=fname; a.rel="noopener"; a.style.display="none"; document.body.appendChild(a);
     let ok=false; try{a.click();ok=true;}catch(e){ok=false;} a.remove();
-    if(!ok){$("videoLink").href=blobUrl;$("videoLink").textContent=`Abrir vídeo (${fname})`;$("videoFallback").style.display="block";}
-    else{log(`✅ Vídeo: ${fname}`);setTimeout(()=>{if(currentVideoBlobUrl){URL.revokeObjectURL(currentVideoBlobUrl);currentVideoBlobUrl=null;}},5000);}
+    if(!ok){$("videoLink").href=blobUrl;$("videoLink").textContent=`Open video (${fname})`;$("videoFallback").style.display="block";}
+    else{log(`✅ Video: ${fname}`);setTimeout(()=>{if(currentVideoBlobUrl){URL.revokeObjectURL(currentVideoBlobUrl);currentVideoBlobUrl=null;}},5000);}
     isRecording=false; $("videoVorBtn").disabled=false; $("videoPlainBtn").disabled=false; $("videoPcBtn").disabled=false;
   }
 
-  function setRec3DBadge(){const b=$("rec3dBadge");if(b)b.textContent=isRecording3D?"REC 3D: grabando…":"REC 3D: parado";}
+  function setRec3DBadge(){const b=$("rec3dBadge");if(b)b.textContent=isRecording3D?"REC 3D: recording…":"REC 3D: stopped";}
 
   async function export3DVideo(){
-    if(isRecording3D){log("⚠️ Ya se está generando un vídeo 3D.");return;}
-    if(!three.ready||!three.renderer?.domElement){log("❌ 3D no está listo.");return;}
-    if(!three.renderer.domElement.captureStream||!window.MediaRecorder){log("❌ No soporta captura WebGL. Prueba Chrome/Edge.");return;}
+    if(isRecording3D){log("⚠️ 3D video is already being recorded.");return;}
+    if(!three.ready||!three.renderer?.domElement){log("❌ 3D is not ready.");return;}
+    if(!three.renderer.domElement.captureStream||!window.MediaRecorder){log("❌ WebGL capture not supported. Try Chrome/Edge.");return;}
     $("video3dFallback").style.display="none";
     if(current3DVideoBlobUrl){try{URL.revokeObjectURL(current3DVideoBlobUrl);}catch(e){} current3DVideoBlobUrl=null;}
     const durationS=getVideoDurationSeconds(), fps=30;
@@ -1961,7 +1943,7 @@
     let recorder; try{recorder=new MediaRecorder(stream,options);}catch(e){recorder=new MediaRecorder(stream);}
     const chunks=[]; recorder.ondataavailable=(ev)=>{if(ev.data&&ev.data.size)chunks.push(ev.data);};
     isRecording3D=true; setRec3DBadge(); $("rec3dBtn").disabled=true;
-    log(`⏺ Grabando 3D (${durationS}s)…`); recorder.start();
+    log(`⏺ Recording 3D (${durationS}s)…`); recorder.start();
     await new Promise(r=>setTimeout(r,Math.max(1,durationS)*1000));
     await new Promise(resolve=>{recorder.onstop=resolve;try{recorder.stop();}catch(e){resolve();}});
     const blob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});
@@ -1969,24 +1951,39 @@
     const fname=`video3d_${(lastTimestampStr||"ts").replace(/[:]/g,"-")}_${durationS}s.webm`;
     const a=document.createElement("a"); a.href=blobUrl; a.download=fname; a.rel="noopener"; a.style.display="none"; document.body.appendChild(a);
     let ok=false; try{a.click();ok=true;}catch(e){ok=false;} a.remove();
-    if(!ok){$("video3dLink").href=blobUrl;$("video3dLink").textContent=`Abrir vídeo 3D (${fname})`;$("video3dFallback").style.display="block";}
-    else{log(`✅ Vídeo 3D: ${fname}`);setTimeout(()=>{if(current3DVideoBlobUrl){URL.revokeObjectURL(current3DVideoBlobUrl);current3DVideoBlobUrl=null;}},5000);}
+    if(!ok){$("video3dLink").href=blobUrl;$("video3dLink").textContent=`Open 3D video (${fname})`;$("video3dFallback").style.display="block";}
+    else{log(`✅ 3D Video: ${fname}`);setTimeout(()=>{if(current3DVideoBlobUrl){URL.revokeObjectURL(current3DVideoBlobUrl);current3DVideoBlobUrl=null;}},5000);}
     isRecording3D=false; $("rec3dBtn").disabled=false; setRec3DBadge();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // CANVAS CLICK → SELECT PLAYER
   // ─────────────────────────────────────────────────────────────────────────
-  canvas.addEventListener("click", (event) => {
+  canvasVor.addEventListener("click", (event) => {
     if (!matchDataCache || !lastFrameObj) return;
-    const rect=canvas.getBoundingClientRect();
-    const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+    const rect=canvasVor.getBoundingClientRect();
+    const scaleX=canvasVor.width/rect.width, scaleY=canvasVor.height/rect.height;
     const clickX=(event.clientX-rect.left)*scaleX, clickY=(event.clientY-rect.top)*scaleY;
 
     let minDist=Infinity, closestId=null;
     for (const pl of (lastFrameObj.player_data||[])) {
       if (pl.x==null||pl.y==null) continue;
-      const [cx,cy]=toCanvasXY(pl.x+52.5, pl.y+34, "main");
+      const [cx,cy]=toCanvasXY(pl.x+52.5, pl.y+34, "vor");
+      const d=Math.hypot(clickX-cx, clickY-cy);
+      if (d<minDist){minDist=d; closestId=pl.player_id;}
+    }
+    if (closestId!==null && minDist<24) selectPlayer(closestId, matchDataCache);
+  });
+  canvasPC.addEventListener("click", (event) => {
+    if (!matchDataCache || !lastFrameObj) return;
+    const rect=canvasPC.getBoundingClientRect();
+    const scaleX=canvasPC.width/rect.width, scaleY=canvasPC.height/rect.height;
+    const clickX=(event.clientX-rect.left)*scaleX, clickY=(event.clientY-rect.top)*scaleY;
+
+    let minDist=Infinity, closestId=null;
+    for (const pl of (lastFrameObj.player_data||[])) {
+      if (pl.x==null||pl.y==null) continue;
+      const [cx,cy]=toCanvasXY(pl.x+52.5, pl.y+34, "pc");
       const d=Math.hypot(clickX-cx, clickY-cy);
       if (d<minDist){minDist=d; closestId=pl.player_id;}
     }
@@ -2009,10 +2006,10 @@
     const f=$("pitchImgFile").files[0]; if(!f) return;
     try {
       pitchImg=await loadImageFromFile(f);
-      drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc");
-      log("✅ Imagen de campo cargada.");
+      drawPitchImageBase("vor"); drawPitchImageBase("pc");
+      log("✅ Pitch image loaded.");
       if (matchDataCache) await previewRender(true);
-    } catch(e) { pitchImg=null; drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc"); log("❌ No se pudo cargar la imagen."); }
+    } catch(e) { pitchImg=null; drawPitchImageBase("vor"); drawPitchImageBase("pc"); log("❌ Could not load the image."); }
   });
 
   $("homeColor").addEventListener("input",  async()=>{ setColorInputs({home:$("homeColor").value,away:$("awayColor").value},"top");   if(matchDataCache&&pitchImg)await previewRender(true); });
@@ -2027,7 +2024,7 @@
 
   $("okBtn").addEventListener("click", async()=>{
     const res=await previewRender(false); if(!res) return;
-    log("Exportando PDF…"); await exportPdf(res.header,res.tsStr,res.colors);
+    log("Exporting PDF…"); await exportPdf(res.header,res.tsStr,res.colors);
     log(`✅ PDF: tracking_${res.tsStr.replace(/[:]/g,"-")}.pdf`);
   });
 
@@ -2074,6 +2071,18 @@
   // Clear selection
   $("clearSelBtn").addEventListener("click", ()=>clearPlayerSelection(matchDataCache));
 
+  // 2D overlay mode toggle (Voronoi / Pitch Control / Off)
+  document.querySelectorAll("[data-mapmode]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      mapMode2D = btn.dataset.mapmode;
+      document.querySelectorAll("[data-mapmode]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      canvasVor.style.display = mapMode2D === "pitchcontrol" ? "none" : "";
+      canvasPC.style.display  = mapMode2D === "pitchcontrol" ? ""     : "none";
+      if (lastFrameObj && matchDataCache) previewRender(true);
+    });
+  });
+
   // Label mode buttons
   document.querySelectorAll(".lmGroup button").forEach(btn=>{
     btn.addEventListener("click", async()=>{
@@ -2095,13 +2104,13 @@
   // ─────────────────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────────────────
-  drawPitchImageBase("main"); drawPitchImageBase("vor"); drawPitchImageBase("pc");
+  drawPitchImageBase("vor"); drawPitchImageBase("pc");
   renderTable(null); renderTableSimple(null);
   syncBottomFromTop();
   setColorInputs({home:$("homeColor").value, away:$("awayColor").value},"top");
   setPlayBadge(); setRec3DBadge();
   init3D();
-  log("Sube match.json, tracking.jsonl e imagen de campo. Haz click en un jugador del canvas para seleccionarlo.");
+  log("Upload match.json, tracking.jsonl and a pitch image. Click a player dot on the canvas to select them.");
 })();
 </script>
 </body>
